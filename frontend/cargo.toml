@@ -1,7 +1,10 @@
+[package]
+name = "w_squid_frontend"
+version = "0.1.0"
+edition = "2021"
+
 [dependencies]
-eframe = "0.27"
+eframe = "0.21"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-egui = "0.21"            # or your version
-dirs = "4.0"             # optional, if you want to get standard config dir
-chrono = "0.4"           # for logging timestamps, if you want
+chrono = { version = "0.4", features = ["local"] }
