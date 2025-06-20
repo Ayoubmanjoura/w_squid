@@ -1,2 +1,7 @@
 [dependencies]
 eframe = "0.27"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+egui = "0.21"            # or your version
+dirs = "4.0"             # optional, if you want to get standard config dir
+chrono = "0.4"           # for logging timestamps, if you want

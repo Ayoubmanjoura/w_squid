@@ -1,18 +1,110 @@
 use eframe::egui;
-use std::fs::{self, OpenOptions};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use chrono::Local;
+use std::{
+    collections::HashMap,
+    process::Command,
+    fs,
+};
+use serde::{Deserialize, Serialize};
 
-fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions::default();
-    eframe::run_native("W Squid", options, Box::new(|_cc| Box::new(MyApp::default())))
-}
-
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct MyApp {
     output: String,
+    services: HashMap<String, bool>,
+    show_services_tab: bool,
+}
+
+impl MyApp {
+    fn load_services(&mut self) {
+        let yaml_path = "backend/services.yaml";
+
+        match fs::read_to_string(yaml_path) {
+            Ok(content) => {
+                match serde_yaml::from_str::<HashMap<String, bool>>(&content) {
+                    Ok(map) => {
+                        self.services = map;
+                        self.output = "✅ Services loaded.".into();
+                    }
+                    Err(e) => {
+                        self.output = format!("❌ YAML parse error: {}", e);
+                    }
+                }
+            }
+            Err(e) => {
+                self.output = format!("❌ Couldn't read services.yaml: {}", e);
+            }
+        }
+    }
+
+    fn save_services(&self) {
+        let yaml_path = "backend/services.yaml";
+
+        match serde_yaml::to_string(&self.services) {
+            Ok(yaml) => {
+                if let Err(e) = fs::write(yaml_path, yaml) {
+                    eprintln!("❌ Failed to write YAML: {}", e);
+                }
+            }
+            Err(e) => {
+                eprintln!("❌ Failed to convert to YAML: {}", e);
+            }
+        }
+    }
+
+    fn run_script(&mut self, script_path: &str, script_name: &str) {
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File",
+                script_path,
+            ])
+            .output();
+
+        match output {
+            Ok(output) => {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let stderr = String::from_utf8_lossy(&output.stderr);
+
+                let status = if output.status.success() {
+                    "✅ Success"
+                } else {
+                    "❌ Failed"
+                };
+
+                let log_msg = format!(
+                    "[{}] [{}] {}\nSTDOUT:\n{}\nSTDERR:\n{}\n---\n",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                    script_name,
+                    status,
+                    stdout,
+                    stderr
+                );
+                // For simplicity, print logs here, or you can write to a file
+                println!("{}", log_msg);
+
+                if output.status.success() {
+                    self.output = format!("✅ {} executed successfully.\n\nSTDOUT:\n{}", script_name, stdout);
+                } else {
+                    self.output = format!("❌ {} failed.\n\nSTDERR:\n{}", script_name, stderr);
+                }
+            }
+            Err(e) => {
+                self.output = format!("❌ Failed to run script: {}", e);
+            }
+        }
+    }
+
+    fn render_service_toggles(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for (service, value) in self.services.clone().into_iter() {
+                let mut val = value;
+                if ui.checkbox(&mut val, &service).changed() {
+                    self.services.insert(service.clone(), val);
+                    self.save_services();
+                }
+            }
+        });
+    }
 }
 
 impl eframe::App for MyApp {
@@ -20,16 +112,30 @@ impl eframe::App for MyApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("🦑 W Squid");
 
-            if ui.button("⚡ Better Power Management").clicked() {
-                self.output = run_script("backend\\powerplan.ps1", "PowerPlan");
-            }
+            ui.horizontal(|ui| {
+                if ui.button("🛠 Optimizations").clicked() {
+                    self.show_services_tab = false;
+                }
+                if ui.button("🧩 Services Toggle").clicked() {
+                    self.load_services();
+                    self.show_services_tab = true;
+                }
+            });
 
-            if ui.button("🗑 Clean Junk Files").clicked() {
-                self.output = run_script("backend\\clean_up.ps1", "CleanUp");
-            }
+            ui.separator();
 
-            if ui.button("💿 Drive Optimization").clicked() {
-                self.output = run_script("backend\\drive_optimization.ps1", "DriveOpt");
+            if self.show_services_tab {
+                self.render_service_toggles(ui);
+            } else {
+                if ui.button("⚡ Better Power Management").clicked() {
+                    self.run_script("backend/powerplan.ps1", "PowerPlan");
+                }
+                if ui.button("🗑 Clean Junk Files").clicked() {
+                    self.run_script("backend/clean_up.ps1", "CleanUp");
+                }
+                if ui.button("💿 Drive Optimization").clicked() {
+                    self.run_script("backend/drive_optimization.ps1", "DriveOpt");
+                }
             }
 
             ui.separator();
@@ -38,82 +144,7 @@ impl eframe::App for MyApp {
     }
 }
 
-fn run_script(script_path: &str, script_name: &str) -> String {
-    let output = Command::new("powershell")
-        .args([
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", script_path,
-        ])
-        .output();
-
-    match output {
-        Ok(output) => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let stderr = String::from_utf8_lossy(&output.stderr);
-
-            let status = if output.status.success() {
-                "✅ Success"
-            } else {
-                "❌ Failed"
-            };
-
-            let log = format!(
-                "[{}] [{}] {}\nSTDOUT:\n{}\nSTDERR:\n{}\n---\n",
-                Local::now().format("%Y-%m-%d %H:%M:%S"),
-                script_name,
-                status,
-                stdout,
-                stderr
-            );
-
-            write_log(&log);
-
-            if output.status.success() {
-                format!("✅ {} executed successfully.\n\nSTDOUT:\n{}", script_name, stdout)
-            } else {
-                format!("❌ {} failed.\n\nSTDERR:\n{}", script_name, stderr)
-            }
-        }
-        Err(e) => {
-            let log = format!(
-                "[{}] [{}] ❌ Error running script: {}\n---\n",
-                Local::now().format("%Y-%m-%d %H:%M:%S"),
-                script_name,
-                e
-            );
-            write_log(&log);
-            format!("❌ Failed to run script: {}", e)
-        }
-    }
+fn main() -> Result<(), eframe::Error> {
+    let options = eframe::NativeOptions::default();
+    eframe::run_native("W Squid", options, Box::new(|_cc| Box::new(MyApp::default())))
 }
-
-fn write_log(content: &str) {
-    let log_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("logs_fallback"))
-        .join("W-Squid")
-        .join("logs");
-
-    if !log_dir.exists() {
-        if let Err(e) = fs::create_dir_all(&log_dir) {
-            eprintln!("Couldn't create log dir: {}", e);
-            return;
-        }
-    }
-
-    let log_file = log_dir.join("w_squid.log");
-
-    let mut file = match OpenOptions::new().create(true).append(true).open(&log_file) {
-        Ok(f) => f,
-        Err(e) => {
-            eprintln!("Couldn't open log file: {}", e);
-            return;
-        }
-    };
-
-    if let Err(e) = writeln!(file, "{}", content) {
-        eprintln!("Couldn't write to log file: {}", e);
-    }
-}
-// This code is a simple GUI application using eframe and egui to run PowerShell scripts for system maintenance tasks.
-// It includes buttons for better power management, cleaning junk files, and drive optimization.

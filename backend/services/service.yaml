@@ -1,9 +1,7 @@
 Fax: true
-RetailDemo: true
 WindowsBiometricService: true
 XblAuthManager: true
 XblGameSave: true
-WMPNetworkSvc: true
 MessagingService: true
 PrintNotify: true
 MapsBroker: true
@@ -22,8 +20,6 @@ XboxNetApiSvc: true
 XboxGipSvc: true
 XboxGameMonitoring: true
 RemoteRegistry: true
-RetailDemo: true
-RetailDemo: true
 ConnectedDevicesPlatformService: true
 RemoteAccessAutoConnectionManager: true
 RemoteAccessConnectionManager: true
@@ -32,13 +28,11 @@ RemoteDesktopServicesUserMode: true
 RemoteProcedureCall (RPC) Locator: true
 SecondaryLogon: true
 WindowsSearch: true
-Fax: true
 TouchKeyboardAndHandwritingPanelService: true
 IPHelper: true
 OfflineFiles: true
 ParentalControls: true
 PeerNetworkingGrouping: true
-PrintNotify: true
 ProgramCompatibilityAssistantService: true
 RetailDemo: true
 SensorService: true
