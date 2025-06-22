@@ -3,7 +3,7 @@ use log::{error, info, warn};
 use simplelog::*;
 use std::{
     collections::HashMap,
-    fs::{self, File},
+    fs,
     path::{Path, PathBuf},
     process::Command,
     sync::mpsc,
@@ -38,7 +38,17 @@ struct MyApp {
 }
 
 impl MyApp {
-    fn new() -> Self {
+    fn new(ctx: &egui::Context) -> Self {
+        let mut style = (*ctx.style()).clone();
+
+        // Dark background color
+        style.visuals.window_fill = egui::Color32::from_rgba_unmultiplied(36, 36, 36, 255);
+
+        // Custom tab selection blue color
+        style.visuals.selection.bg_fill = egui::Color32::from_rgba_unmultiplied(124, 127, 235, 255);
+
+        ctx.set_style(style);
+
         let mut app = Self::default();
         app.load_services();
         app
@@ -50,7 +60,7 @@ impl MyApp {
             Ok(content) => match serde_yaml::from_str::<HashMap<String, bool>>(&content) {
                 Ok(map) => {
                     self.services = map;
-                    self.output = "✅ Services loaded.".to_string();
+                    self.output = "    ✅ Services loaded.".to_string();
                     info!("Services loaded successfully from {:?}", path);
                 }
                 Err(e) => {
@@ -136,6 +146,7 @@ impl MyApp {
 
     fn render_services_tab(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.add_space(10.0);
             for (service, enabled) in self.services.clone() {
                 let mut toggled = enabled;
                 if ui.checkbox(&mut toggled, &service).changed() {
@@ -152,79 +163,154 @@ impl MyApp {
                         warn!("{}", msg);
                     }
                 }
+                ui.add_space(8.0);
             }
+            ui.add_space(10.0);
         });
     }
 
     fn render_optimizations_tab(&mut self, ui: &mut egui::Ui) {
         let base = Path::new("D:/Projects/w_squid/backend/disable");
 
-        if ui.button("⚡ Better Power Management").clicked() {
-            self.run_script_async(base.join("powerplan.ps1"), "PowerPlan".to_string());
-            self.output = "⌛ Running PowerPlan script...".to_string();
-        }
+        ui.horizontal(|ui| {
+            ui.add_space(15.0); // left padding
 
-        if ui.button("🗑 Clean Junk Files").clicked() {
-            self.run_script_async(base.join("clean_up.ps1"), "CleanUp".to_string());
-            self.output = "⌛ Running CleanUp script...".to_string();
-        }
+            ui.vertical(|ui| {
+                ui.add_space(10.0); // top padding
 
-        if ui.button("💿 Drive Optimization").clicked() {
-            self.run_script_async(base.join("drive_optimization.ps1"), "DriveOpt".to_string());
-            self.output = "⌛ Running Drive Optimization script...".to_string();
-        }
+                if ui.button("⚡ Better Power Management").clicked() {
+                    self.run_script_async(base.join("powerplan.ps1"), "PowerPlan".to_string());
+                    self.output = "⌛ Running PowerPlan script...".to_string();
+                }
+                ui.add_space(10.0);
+
+                if ui.button("🗑 Clean Junk Files").clicked() {
+                    self.run_script_async(base.join("clean_up.ps1"), "CleanUp".to_string());
+                    self.output = "⌛ Running CleanUp script...".to_string();
+                }
+                ui.add_space(10.0);
+
+                if ui.button("💿 Drive Optimization").clicked() {
+                    self.run_script_async(base.join("drive_optimization.ps1"), "DriveOpt".to_string());
+                    self.output = "⌛ Running Drive Optimization script...".to_string();
+                }
+                ui.add_space(8.0); // bottom padding
+            });
+
+            ui.add_space(15.0); // right padding
+        });
+    }
+}
+
+// Fluent-inspired elevation frame with shadow & radius
+fn elevated_frame(elevation: u8) -> egui::Frame {
+    let alpha = (elevation as f32 / 64.0).min(0.25);
+    egui::Frame {
+        fill: egui::Color32::from_rgba_unmultiplied(36, 36, 36, 255),
+        stroke: egui::Stroke {
+            width: (elevation as f32 / 4.0).max(1.0),
+            color: egui::Color32::from_black_alpha((alpha * 255.0) as u8),
+        },
+        corner_radius: 6.0.into(),
+        ..Default::default()
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("🦑 W Squid");
+            elevated_frame(12).show(ui, |ui| {
+                // Heading with padding
+                ui.vertical_centered(|ui| {
+                    ui.add_space(12.0);
+                    ui.heading("⚙️ w squid");
+                    ui.add_space(12.0);
+                });
 
-            ui.horizontal(|ui| {
-                if ui
-                    .selectable_label(self.active_tab == Tab::Optimizations, "🛠 Optimizations")
-                    .clicked()
-                {
-                    self.active_tab = Tab::Optimizations;
-                }
-                if ui
-                    .selectable_label(self.active_tab == Tab::Services, "🧩 Services Toggle")
-                    .clicked()
-                {
-                    self.active_tab = Tab::Services;
+                ui.separator();
+
+                // Tab selector with padding on all sides
+                elevated_frame(4).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(12.0); // left padding
+
+                        if ui
+                            .selectable_label(self.active_tab == Tab::Optimizations, "🛠 Optimizations")
+                            .clicked()
+                        {
+                            self.active_tab = Tab::Optimizations;
+                        }
+
+                        ui.add_space(20.0); // spacing between buttons
+
+                        if ui
+                            .selectable_label(self.active_tab == Tab::Services, "🔧 Services Toggle")
+                            .clicked()
+                        {
+                            self.active_tab = Tab::Services;
+                        }
+
+                        ui.add_space(12.0); // right padding
+                    });
+                });
+
+                ui.add_space(12.0);
+                ui.separator();
+
+                // Content box (Optimizations or Services) with solid padding all around
+                elevated_frame(8).show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add_space(15.0); // left padding
+
+                        ui.vertical(|ui| {
+                            ui.add_space(15.0); // top padding
+
+                            match self.active_tab {
+                                Tab::Optimizations => self.render_optimizations_tab(ui),
+                                Tab::Services => self.render_services_tab(ui),
+                            }
+
+                            ui.add_space(15.0); // bottom padding
+                        });
+
+                        ui.add_space(15.0); // right padding
+                    });
+                });
+
+                ui.add_space(12.0);
+                ui.separator();
+
+                // Output box with scroll and padding
+                egui::ScrollArea::vertical()
+                    .max_height(150.0)
+                    .show(ui, |ui| {
+                        ui.add_space(12.0);
+                        ui.label(&self.output);
+                        ui.add_space(12.0);
+                    });
+
+                ui.add_space(12.0);
+
+                // Handle async script results as before
+                if let Some(rx) = &self.rx {
+                    if let Ok(result) = rx.try_recv() {
+                        if result.success {
+                            self.output = format!(
+                                "✅ {} succeeded.\n\nSTDOUT:\n{}",
+                                result.script_name, result.stdout
+                            );
+                            info!("{} succeeded", result.script_name);
+                        } else {
+                            self.output = format!(
+                                "❌ {} failed.\n\nSTDERR:\n{}",
+                                result.script_name, result.stderr
+                            );
+                            error!("{} failed: {}", result.script_name, result.stderr);
+                        }
+                        ctx.request_repaint();
+                    }
                 }
             });
-
-            ui.separator();
-
-            match self.active_tab {
-                Tab::Optimizations => self.render_optimizations_tab(ui),
-                Tab::Services => self.render_services_tab(ui),
-            }
-
-            ui.separator();
-
-            ui.label(&self.output);
-
-            if let Some(rx) = &self.rx {
-                if let Ok(result) = rx.try_recv() {
-                    if result.success {
-                        self.output = format!(
-                            "✅ {} succeeded.\n\nSTDOUT:\n{}",
-                            result.script_name, result.stdout
-                        );
-                        info!("{} succeeded", result.script_name);
-                    } else {
-                        self.output = format!(
-                            "❌ {} failed.\n\nSTDERR:\n{}",
-                            result.script_name, result.stderr
-                        );
-                        error!("{} failed: {}", result.script_name, result.stderr);
-                    }
-                    ctx.request_repaint();
-                }
-            }
         });
     }
 }
@@ -237,16 +323,16 @@ fn main() -> Result<(), eframe::Error> {
             TerminalMode::Mixed,
             ColorChoice::Auto,
         ),
-        WriteLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            File::create("w_squid.log").unwrap(),
-        ),
     ])
     .unwrap();
 
-    log::info!("Launching W Squid...");
+    log::info!("Launching w_squid...");
 
     let options = eframe::NativeOptions::default();
-    eframe::run_native("W Squid", options, Box::new(|_cc| Ok(Box::new(MyApp::new()))))
+    eframe::run_native(
+        "w squid",
+        options,
+        Box::new(|cc| Ok(Box::new(MyApp::new(&cc.egui_ctx)))),
+    )
 }
+
