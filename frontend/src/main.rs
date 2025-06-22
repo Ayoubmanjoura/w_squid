@@ -18,17 +18,15 @@ impl MyApp {
         let yaml_path = "backend/disable/services/service.yaml";
 
         match fs::read_to_string(yaml_path) {
-            Ok(content) => {
-                match serde_yaml::from_str::<HashMap<String, bool>>(&content) {
-                    Ok(map) => {
-                        self.services = map;
-                        self.output = "✅ Services loaded.".into();
-                    }
-                    Err(e) => {
-                        self.output = format!("❌ YAML parse error: {}", e);
-                    }
+            Ok(content) => match serde_yaml::from_str::<HashMap<String, bool>>(&content) {
+                Ok(map) => {
+                    self.services = map;
+                    self.output = "✅ Services loaded.".into();
                 }
-            }
+                Err(e) => {
+                    self.output = format!("❌ YAML parse error: {}", e);
+                }
+            },
             Err(e) => {
                 self.output = format!("❌ Couldn't read services.yaml: {}", e);
             }
@@ -54,7 +52,8 @@ impl MyApp {
         let output = Command::new("powershell")
             .args([
                 "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
+                "-ExecutionPolicy",
+                "Bypass",
                 "-File",
                 script_path,
             ])
@@ -96,41 +95,48 @@ impl MyApp {
     fn get_script_path(&self, service: &str, enabled: bool) -> Option<String> {
         let service = service.to_lowercase();
         if enabled {
-            // Run enable scripts from backend/enable/
             match service.as_str() {
-                "ipv6" => Some("backend/enable/enable_ipv6.ps1".to_string()),
-                "offload" => Some("backend/enable/enable_offload.ps1".to_string()),
-                "tcp_tuning" => Some("backend/enable/enable_tcp_tuning.ps1".to_string()),
+                "ipv6" => Some("../../backend/enable/enable_ipv6.ps1".to_string()),
+                "offload" => Some("../../backend/enable/enable_offload.ps1".to_string()),
+                "tcp_tuning" => Some("../../backend/enable/enable_tcp_tuning.ps1".to_string()),
                 _ => None,
             }
         } else {
-            // Run disable scripts from backend/disable/
             match service.as_str() {
-                "ipv6" => Some("backend/disable/disable_ipv6.ps1".to_string()),
-                "offload" => Some("backend/disable/disable_offload.ps1".to_string()),
-                "tcp_tuning" => Some("backend/disable/disable_tcp_tuning.ps1".to_string()),
+                "ipv6" => Some("../../backend/disable/disable_ipv6.ps1".to_string()),
+                "offload" => Some("../../backend/disable/disable_offload.ps1".to_string()),
+                "tcp_tuning" => Some("../../backend/disable/disable_tcp_tuning.ps1".to_string()),
                 _ => None,
             }
         }
     }
 
     fn render_service_toggles(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            for (service, current_value) in self.services.clone().into_iter() {
-                let mut val = current_value;
-                if ui.checkbox(&mut val, &service).changed() {
-                    self.services.insert(service.clone(), val);
-                    self.save_services();
+        // Collect changed services here to avoid mutable borrow issues
+        let mut changed_services = Vec::new();
 
-                    if let Some(script_path) = self.get_script_path(&service, val) {
-                        let script_name = format!("{} {}", if val { "Enable" } else { "Disable" }, service);
-                        self.run_script(&script_path, &script_name);
-                    } else {
-                        self.output = format!("⚠️ No script configured for {} {}", service, if val { "enable" } else { "disable" });
-                    }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            // Iterate over cloned keys to avoid borrow conflicts
+            for service in self.services.keys().cloned().collect::<Vec<_>>() {
+                let mut enabled = *self.services.get(&service).unwrap_or(&false);
+                if ui.checkbox(&mut enabled, &service).changed() {
+                    changed_services.push((service, enabled));
                 }
             }
         });
+
+        // Apply changes after UI interaction
+        for (service, enabled) in changed_services {
+            self.services.insert(service.clone(), enabled);
+            self.save_services();
+
+            if let Some(script) = self.get_script_path(&service, enabled) {
+                let action = if enabled { "Enable" } else { "Disable" };
+                self.run_script(&script, &format!("{} {}", action, service));
+            } else {
+                self.output = format!("⚠️ No script configured for {} {}", service, if enabled { "enable" } else { "disable" });
+            }
+        }
     }
 }
 
@@ -155,13 +161,13 @@ impl eframe::App for MyApp {
                 self.render_service_toggles(ui);
             } else {
                 if ui.button("⚡ Better Power Management").clicked() {
-                    self.run_script("backend/enable/powerplan.ps1", "PowerPlan");
+                    self.run_script("../../backend/enable/powerplan.ps1", "PowerPlan");
                 }
                 if ui.button("🗑 Clean Junk Files").clicked() {
-                    self.run_script("backend/enable/clean_up.ps1", "CleanUp");
+                    self.run_script("../../backend/enable/clean_up.ps1", "CleanUp");
                 }
                 if ui.button("💿 Drive Optimization").clicked() {
-                    self.run_script("backend/enable/drive_optimization.ps1", "DriveOpt");
+                    self.run_script("../../backend/enable/drive_optimization.ps1", "DriveOpt");
                 }
             }
 
@@ -173,5 +179,5 @@ impl eframe::App for MyApp {
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions::default();
-    eframe::run_native("W Squid", options, Box::new(|_cc| Box::new(MyApp::default())))
+    eframe::run_native("W Squid", options, Box::new(|_cc| Ok(Box::new(MyApp::default()))))
 }
