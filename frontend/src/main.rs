@@ -8,6 +8,7 @@ use std::{
     process::Command,
     sync::mpsc,
     thread,
+    time::Duration,
 };
 
 #[derive(Copy, Clone, PartialEq)]
@@ -40,13 +41,8 @@ struct MyApp {
 impl MyApp {
     fn new(ctx: &egui::Context) -> Self {
         let mut style = (*ctx.style()).clone();
-
-        // Dark background color
-        style.visuals.window_fill = egui::Color32::from_rgba_unmultiplied(36, 36, 36, 255);
-
-        // Custom tab selection blue color
-        style.visuals.selection.bg_fill = egui::Color32::from_rgba_unmultiplied(124, 127, 235, 255);
-
+        style.visuals.window_fill = egui::Color32::from_rgb(36, 36, 36);
+        style.visuals.selection.bg_fill = egui::Color32::from_rgb(124, 127, 235);
         ctx.set_style(style);
 
         let mut app = Self::default();
@@ -55,13 +51,13 @@ impl MyApp {
     }
 
     fn load_services(&mut self) {
-        let path = Path::new("D:/Projects/w_squid/backend/disable/services/service.yaml");
+        let path = Path::new("D:/Projects/w_squid/backend/services/service.yaml");
         match fs::read_to_string(path) {
             Ok(content) => match serde_yaml::from_str::<HashMap<String, bool>>(&content) {
                 Ok(map) => {
                     self.services = map;
-                    self.output = "    ✅ Services loaded.".to_string();
-                    info!("Services loaded successfully from {:?}", path);
+                    self.output = "✅ Services loaded.".into();
+                    info!("Services loaded from {:?}", path);
                 }
                 Err(e) => {
                     let msg = format!("❌ YAML parse error: {}", e);
@@ -78,7 +74,7 @@ impl MyApp {
     }
 
     fn save_services(&self) {
-        let path = Path::new("D:/Projects/w_squid/backend/disable/services/service.yaml");
+        let path = Path::new("D:/Projects/w_squid/backend/services/service.yaml");
         match serde_yaml::to_string(&self.services) {
             Ok(yaml) => {
                 if let Err(e) = fs::write(path, yaml) {
@@ -91,122 +87,156 @@ impl MyApp {
         }
     }
 
-    fn get_script_path(service: &str, enable: bool) -> Option<PathBuf> {
-        let base = Path::new("D:/Projects/w_squid/backend");
-        let sub = if enable { "enable" } else { "disable" };
-        let filename = match service.to_lowercase().as_str() {
-            "ipv6" => "disable_ipv6",
-            "offload" => "disable_offload",
-            "tcp_tuning" => "disable_tcp_tuning",
-            _ => return None,
-        };
-        Some(base.join(sub).join(format!("{}_{}.ps1", sub, filename)))
-    }
+fn run_script_async(&mut self, script_path: PathBuf, script_name: String) {
+    info!("Launching script: {} -> {}", script_name, script_path.display());
 
-    fn run_script_async(&mut self, script_path: PathBuf, script_name: String) {
-        info!("Launching script: {} -> {}", script_name, script_path.display());
+    let (tx, rx) = mpsc::channel();
+    self.rx = Some(rx);
 
-        let (tx, rx) = mpsc::channel();
-        self.rx = Some(rx);
-
-        thread::spawn(move || {
-            let output = Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    script_path.to_str().unwrap_or(""),
-                ])
-                .output();
-
-            let (success, stdout, stderr) = match output {
-                Ok(out) => (
-                    out.status.success(),
-                    String::from_utf8_lossy(&out.stdout).to_string(),
-                    String::from_utf8_lossy(&out.stderr).to_string(),
-                ),
-                Err(e) => {
-                    let msg = format!("Failed to run script: {}", e);
-                    error!("{}", msg);
-                    (false, String::new(), msg)
-                }
-            };
-
-            let result = ScriptResult {
+    thread::spawn(move || {
+        if !script_path.exists() {
+            let msg = format!("❌ Script not found: {}", script_path.display());
+            error!("{}", msg);
+            let _ = tx.send(ScriptResult {
                 script_name,
-                success,
-                stdout,
-                stderr,
-            };
+                success: false,
+                stdout: String::new(),
+                stderr: msg,
+            });
+            return;
+        }
 
-            let _ = tx.send(result);
-        });
-    }
+        let script_str = match script_path.to_str() {
+            Some(s) => s,
+            None => {
+                let msg = "❌ Invalid script path (non-UTF8)".to_string();
+                error!("{}", msg);
+                let _ = tx.send(ScriptResult {
+                    script_name,
+                    success: false,
+                    stdout: String::new(),
+                    stderr: msg,
+                });
+                return;
+            }
+        };
+
+        let output = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_str,
+            ])
+            .output();
+
+        let (success, stdout, stderr) = match output {
+            Ok(out) => (
+                out.status.success(),
+                String::from_utf8_lossy(&out.stdout).to_string(),
+                String::from_utf8_lossy(&out.stderr).to_string(),
+            ),
+            Err(e) => {
+                let msg = format!("Failed to run script: {}", e);
+                error!("{}", msg);
+                (false, String::new(), msg)
+            }
+        };
+
+        let result = ScriptResult {
+            script_name,
+            success,
+            stdout,
+            stderr,
+        };
+
+        let _ = tx.send(result);
+    });
+}
+
 
     fn render_services_tab(&mut self, ui: &mut egui::Ui) {
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.add_space(10.0);
-            for (service, enabled) in self.services.clone() {
-                let mut toggled = enabled;
-                if ui.checkbox(&mut toggled, &service).changed() {
-                    self.services.insert(service.clone(), toggled);
-                    self.save_services();
+    let mut changed_services = vec![];
 
-                    if let Some(script_path) = Self::get_script_path(&service, toggled) {
-                        let action = if toggled { "Enable" } else { "Disable" };
-                        self.run_script_async(script_path, format!("{} {}", action, service));
-                        self.output = format!("⌛ Running {} script...", action);
-                    } else {
-                        let msg = format!("⚠️ No script found for '{}'", service);
-                        self.output = msg.clone();
-                        warn!("{}", msg);
-                    }
-                }
-                ui.add_space(8.0);
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.add_space(10.0);
+
+        for (service, enabled) in self.services.iter() {
+            let mut toggled = *enabled;
+            if ui.checkbox(&mut toggled, service).changed() {
+                changed_services.push((service.clone(), toggled));
             }
-            ui.add_space(10.0);
-        });
+            ui.add_space(8.0);
+        }
+    });
+
+    if !changed_services.is_empty() {
+        for (service, toggled) in &changed_services {
+            self.services.insert(service.clone(), *toggled);
+            warn!("Toggled service '{}'. No script bound to this action.", service);
+        }
+        self.save_services();
+        self.output = format!(
+            "🔄 Toggled {} service(s): {}",
+            changed_services.len(),
+            changed_services
+                .iter()
+                .map(|(s, _)| s.clone())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
     }
+}
+
 
     fn render_optimizations_tab(&mut self, ui: &mut egui::Ui) {
-        let base = Path::new("D:/Projects/w_squid/backend/disable");
+        let base = Path::new("D:/Projects/w_squid/backend");
 
-        ui.horizontal(|ui| {
-            ui.add_space(15.0); // left padding
+        ui.vertical(|ui| {
+            ui.heading("🚀 One-Time Tweaks");
+            ui.add_space(10.0);
 
-            ui.vertical(|ui| {
-                ui.add_space(10.0); // top padding
+            if ui.button("⚡ Better Power Management").clicked() {
+                self.run_script_async(base.join("powerplan.ps1"), "PowerPlan".into());
+                self.output = "⌛ Running PowerPlan script...".into();
+            }
 
-                if ui.button("⚡ Better Power Management").clicked() {
-                    self.run_script_async(base.join("powerplan.ps1"), "PowerPlan".to_string());
-                    self.output = "⌛ Running PowerPlan script...".to_string();
-                }
-                ui.add_space(10.0);
+            if ui.button("🗑 Clean Junk Files").clicked() {
+                self.run_script_async(base.join("clean_up.ps1"), "CleanUp".into());
+                self.output = "⌛ Running CleanUp script...".into();
+            }
 
-                if ui.button("🗑 Clean Junk Files").clicked() {
-                    self.run_script_async(base.join("clean_up.ps1"), "CleanUp".to_string());
-                    self.output = "⌛ Running CleanUp script...".to_string();
-                }
-                ui.add_space(10.0);
+            if ui.button("💿 Drive Optimization").clicked() {
+                self.run_script_async(base.join("drive_optimization.ps1"), "DriveOpt".into());
+                self.output = "⌛ Running Drive Optimization script...".into();
+            }
 
-                if ui.button("💿 Drive Optimization").clicked() {
-                    self.run_script_async(base.join("drive_optimization.ps1"), "DriveOpt".to_string());
-                    self.output = "⌛ Running Drive Optimization script...".to_string();
-                }
-                ui.add_space(8.0); // bottom padding
-            });
+            ui.add_space(20.0);
+            ui.heading("🧪 Experimental Scripts");
 
-            ui.add_space(15.0); // right padding
+            if ui.button("🌐 Disable IPv6").clicked() {
+                self.run_script_async(base.join("disable_ipv6.ps1"), "IPv6 Disable".into());
+                self.output = "⌛ Running IPv6 Disable script...".into();
+            }
+
+            if ui.button("📥 Disable Network Offloading").clicked() {
+                self.run_script_async(base.join("disable_offload.ps1"), "Offload Disable".into());
+                self.output = "⌛ Running Offload Disable script...".into();
+            }
+
+            if ui.button("📶 TCP Tuning Boost").clicked() {
+                self.run_script_async(base.join("disable_tcp_tuning.ps1"), "TCP Tuning".into());
+                self.output = "⌛ Running TCP Tuning script...".into();
+            }
         });
     }
 }
 
-// Fluent-inspired elevation frame with shadow & radius
 fn elevated_frame(elevation: u8) -> egui::Frame {
     let alpha = (elevation as f32 / 64.0).min(0.25);
     egui::Frame {
-        fill: egui::Color32::from_rgba_unmultiplied(36, 36, 36, 255),
+        fill: egui::Color32::from_rgb(36, 36, 36),
         stroke: egui::Stroke {
             width: (elevation as f32 / 4.0).max(1.0),
             color: egui::Color32::from_black_alpha((alpha * 255.0) as u8),
@@ -218,9 +248,10 @@ fn elevated_frame(elevation: u8) -> egui::Frame {
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        ctx.request_repaint_after(Duration::from_millis(100)); // periodic refresh
+
         egui::CentralPanel::default().show(ctx, |ui| {
             elevated_frame(12).show(ui, |ui| {
-                // Heading with padding
                 ui.vertical_centered(|ui| {
                     ui.add_space(12.0);
                     ui.heading("⚙️ w squid");
@@ -229,58 +260,41 @@ impl eframe::App for MyApp {
 
                 ui.separator();
 
-                // Tab selector with padding on all sides
                 elevated_frame(4).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.add_space(12.0); // left padding
-
-                        if ui
-                            .selectable_label(self.active_tab == Tab::Optimizations, "🛠 Optimizations")
-                            .clicked()
-                        {
+                        ui.add_space(12.0);
+                        if ui.selectable_label(self.active_tab == Tab::Optimizations, "🛠 Optimizations").clicked() {
                             self.active_tab = Tab::Optimizations;
                         }
-
-                        ui.add_space(20.0); // spacing between buttons
-
-                        if ui
-                            .selectable_label(self.active_tab == Tab::Services, "🔧 Services Toggle")
-                            .clicked()
-                        {
+                        ui.add_space(20.0);
+                        if ui.selectable_label(self.active_tab == Tab::Services, "🔧 Services Toggle").clicked() {
                             self.active_tab = Tab::Services;
                         }
-
-                        ui.add_space(12.0); // right padding
+                        ui.add_space(12.0);
                     });
                 });
 
                 ui.add_space(12.0);
                 ui.separator();
 
-                // Content box (Optimizations or Services) with solid padding all around
                 elevated_frame(8).show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        ui.add_space(15.0); // left padding
-
+                        ui.add_space(15.0);
                         ui.vertical(|ui| {
-                            ui.add_space(15.0); // top padding
-
+                            ui.add_space(15.0);
                             match self.active_tab {
                                 Tab::Optimizations => self.render_optimizations_tab(ui),
                                 Tab::Services => self.render_services_tab(ui),
                             }
-
-                            ui.add_space(15.0); // bottom padding
+                            ui.add_space(15.0);
                         });
-
-                        ui.add_space(15.0); // right padding
+                        ui.add_space(15.0);
                     });
                 });
 
                 ui.add_space(12.0);
                 ui.separator();
 
-                // Output box with scroll and padding
                 egui::ScrollArea::vertical()
                     .max_height(150.0)
                     .show(ui, |ui| {
@@ -291,22 +305,13 @@ impl eframe::App for MyApp {
 
                 ui.add_space(12.0);
 
-                // Handle async script results as before
                 if let Some(rx) = &self.rx {
                     if let Ok(result) = rx.try_recv() {
-                        if result.success {
-                            self.output = format!(
-                                "✅ {} succeeded.\n\nSTDOUT:\n{}",
-                                result.script_name, result.stdout
-                            );
-                            info!("{} succeeded", result.script_name);
+                        self.output = if result.success {
+                            format!("✅ {} succeeded.\n\nSTDOUT:\n{}", result.script_name, result.stdout)
                         } else {
-                            self.output = format!(
-                                "❌ {} failed.\n\nSTDERR:\n{}",
-                                result.script_name, result.stderr
-                            );
-                            error!("{} failed: {}", result.script_name, result.stderr);
-                        }
+                            format!("❌ {} failed.\n\nSTDERR:\n{}", result.script_name, result.stderr)
+                        };
                         ctx.request_repaint();
                     }
                 }
@@ -316,23 +321,16 @@ impl eframe::App for MyApp {
 }
 
 fn main() -> Result<(), eframe::Error> {
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Info,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        ),
-    ])
+    CombinedLogger::init(vec![TermLogger::new(
+        LevelFilter::Info,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )])
     .unwrap();
 
-    log::info!("Launching w_squid...");
+    info!("Launching w_squid...");
 
     let options = eframe::NativeOptions::default();
-    eframe::run_native(
-        "w squid",
-        options,
-        Box::new(|cc| Ok(Box::new(MyApp::new(&cc.egui_ctx)))),
-    )
+    eframe::run_native("w squid", options, Box::new(|cc| Ok(Box::new(MyApp::new(&cc.egui_ctx)))))
 }
-
