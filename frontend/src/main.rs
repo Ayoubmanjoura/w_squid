@@ -229,6 +229,14 @@ fn run_script_async(&mut self, script_path: PathBuf, script_name: String) {
                 self.run_script_async(base.join("disable_tcp_tuning.ps1"), "TCP Tuning".into());
                 self.output = "⌛ Running TCP Tuning script...".into();
             }
+            if ui.button("🖱️​ Fix Input Delay").clicked() {
+                self.run_script_async(base.join("input_delay_fix.ps1"), "Input Delay".into());
+                self.output = "⌛ Fixing input delay...".into();
+            }
+            if ui.button("🔄​ Higher Refresh Rate").clicked() {
+                self.run_script_async(base.join("higher_refresh_rate.ps1"), "Refresh_rate".into());
+                self.output = "⌛ Fixing Refresh rate...".into();
+            }
         });
     }
 }
