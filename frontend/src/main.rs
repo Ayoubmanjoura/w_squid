@@ -237,6 +237,22 @@ fn run_script_async(&mut self, script_path: PathBuf, script_name: String) {
                 self.run_script_async(base.join("higher_refresh_rate.ps1"), "Refresh_rate".into());
                 self.output = "⌛ Fixing Refresh rate...".into();
             }
+            if ui.button("💩 Remove Bloatware").clicked() {
+                self.run_script_async(base.join("remove_bloatware.ps1"), "bloatware".into());
+                self.output = "⌛ Remove bloatware...".into();
+            }
+            if ui.button("🎮 Enable Gamemode").clicked() {
+                self.run_script_async(base.join("gamemode.ps1"), "gamemode".into());
+                self.output = "⌛ Enabling Gamemode...".into();
+            }
+            if ui.button("🔥 Overcock CPU (use with caution)").clicked() {
+                self.run_script_async(base.join("overclocking.ps1"), "overclock".into());
+                self.output = "⌛ Over cocking Cpu...".into();
+            }
+            if ui.button("🚫 Disable fullscreen Optimisation").clicked() {
+                self.run_script_async(base.join("disable_fs_optimization.ps1"), "fs_opti".into());
+                self.output = "⌛ Disabling Fullscreen Optimisation...".into();
+            }
         });
     }
 }
@@ -327,7 +343,6 @@ impl eframe::App for MyApp {
         });
     }
 }
-
 fn main() -> Result<(), eframe::Error> {
     CombinedLogger::init(vec![TermLogger::new(
         LevelFilter::Info,
