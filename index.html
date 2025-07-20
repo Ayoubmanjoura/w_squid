@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>🦑 w-squid Control Panel</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 10px; }
+  button { margin: 5px 0; padding: 8px; width: 100%; }
+  #output { height: 160px; width: 100%; margin-top: 10px; white-space: pre-wrap; background: #222; color: #0f0; padding: 10px; overflow-y: scroll; font-family: monospace; }
+  #tabs { display: flex; margin-bottom: 10px; }
+  .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab.active { border-bottom: 2px solid #007acc; font-weight: bold; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  label { display: block; margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<div id="tabs">
+  <div class="tab active" data-tab="optimizations">🛠 Optimizations</div>
+  <div class="tab" data-tab="services">🔧 Services</div>
+</div>
+
+<div id="optimizations" class="tab-content active">
+  <!-- Buttons will be here -->
+</div>
+
+<div id="services" class="tab-content">
+  <!-- Services checkboxes here -->
+</div>
+
+<h3>Output:</h3>
+<div id="output">Loading...</div>
+
+<script>
+  const outputBox = document.getElementById("output");
+  const optimizationsTab = document.getElementById("optimizations");
+  const servicesTab = document.getElementById("services");
+  const tabs = document.querySelectorAll(".tab");
+
+  // Tab switching logic
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      document.querySelectorAll(".tab-content").forEach(tc => tc.classList.remove("active"));
+      document.getElementById(tab.dataset.tab).classList.add("active");
+    });
+  });
+
+  // Scripts list from your Python code
+  const scripts = [
+    { label: "⚡ Better Power Management", name: "PowerPlan" },
+    { label: "🗑 Clean Junk Files", name: "CleanUp" },
+    { label: "💿 Drive Optimization", name: "DriveOpt" },
+    { label: "🌐 Disable IPv6", name: "IPv6 Disable" },
+    { label: "📥 Disable Network Offloading", name: "Offload Disable" },
+    { label: "📶 TCP Tuning Boost", name: "TCP Tuning" },
+    { label: "🖱️ Fix Input Delay", name: "Input Delay" },
+    { label: "🔄 Higher Refresh Rate", name: "Refresh_rate" },
+    { label: "💩 Remove Bloatware", name: "bloatware" },
+    { label: "🎮 Enable Gamemode", name: "gamemode" },
+    { label: "🔥 Overclock CPU (⚠️ risky)", name: "overclock" },
+    { label: "🚫 Disable Fullscreen Optimization", name: "fs_opti" },
+  ];
+
+  // Add buttons for scripts
+  scripts.forEach(({ label, name }) => {
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.onclick = async () => {
+      outputBox.textContent = `Running ${name}...`;
+      const result = await window.api.runScript(name);
+      outputBox.textContent = result.output;
+    };
+    optimizationsTab.appendChild(btn);
+  });
+
+  // Load services from YAML and build checkboxes
+  async function loadServices() {
+    const result = await window.api.loadServices();
+    if (!result.success) {
+      outputBox.textContent = `❌ Failed to load services: ${result.error}`;
+      return;
+    }
+    servicesTab.innerHTML = ""; // clear old
+
+    const services = result.services;
+    Object.entries(services).forEach(([name, enabled]) => {
+      const label = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = enabled;
+      checkbox.onchange = async () => {
+        services[name] = checkbox.checked;
+        await window.api.saveServices(services);
+        outputBox.textContent = `🔄 Toggled service: ${name} = ${checkbox.checked}`;
+      };
+      label.appendChild(checkbox);
+      label.appendChild(document.createTextNode(" " + name));
+      servicesTab.appendChild(label);
+    });
+
+    outputBox.textContent = "✅ Services loaded.";
+  }
+
+  loadServices();
+</script>
+
+</body>
+</html>

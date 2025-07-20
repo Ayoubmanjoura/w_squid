@@ -1,2 +1,2 @@
-frontend/target/
-frontend/w_squid.log
+node_modules/
+package-lock.json
