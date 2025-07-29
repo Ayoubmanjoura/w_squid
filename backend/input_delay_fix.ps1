@@ -13,3 +13,4 @@ Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseThreshold2" -Valu
 
 Write-Host "`n✅ HPET disabled and mouse acceleration removed."
 Write-Host "🔁 Restart your PC for changes to take effect." -ForegroundColor Yellow
+

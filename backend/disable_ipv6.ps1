@@ -22,7 +22,7 @@ $offloadSettings = @(
 $interfaces = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
 
 foreach ($intf in $interfaces) {
-    Write-Output "nInterface: $($intf.Name)"
+    Write-Output "`nInterface: $($intf.Name)"
     foreach ($setting in $offloadSettings) {
         try {
             Set-NetAdapterAdvancedProperty -Name $intf.Name -DisplayName $setting -DisplayValue "Disabled" -ErrorAction Stop
@@ -33,4 +33,4 @@ foreach ($intf in $interfaces) {
     }
 }
 
-Write-Output "nAll possible offloads disabled (or already off). Reboot if issues persist."
+Write-Output "`nAll possible offloads disabled (or already off). Reboot if issues persist."

@@ -30,6 +30,9 @@ Set-ItemProperty -Path $deliveryOptimizationPath -Name "DownloadMode" -Value 0 -
 # Additional settings to ensure it's fully disabled
 Set-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Name "DODownloadMode" -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
+Stop-Service wuauserv
+Set-Service wuauserv -StartupType Disabled
+
 Write-Host "Delivery Optimization has been disabled."
 Write-Host "Note: Changes may take effect after the next reboot."
 Write-Host "You can verify the settings in: Settings > Update & Security > Delivery Optimization"
