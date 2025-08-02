@@ -129,14 +129,14 @@ function Get-CurrentStatus {
         }
         Write-Host "SMBv1 Status: $smbv1Status" -ForegroundColor $(if ($smbv1Status -eq 'ENABLED') { 'Red' } else { 'Green' })
     } catch {
-        Write-Host "SMBv1 Status: Unable to determine" -ForegroundColor Yellow
+        Write-Host "SMBv1 Status: Unable to determine" 
     }
 }
 
 # Main execution
 try {
     # Show current status before changes
-    Write-Host "BEFORE CHANGES:" -ForegroundColor Cyan
+    Write-Host "BEFORE CHANGES:" 
     Get-CurrentStatus
     
     # Disable protocols
@@ -144,12 +144,12 @@ try {
     Disable-SMBv1
     
     # Show status after changes
-    Write-Host "`nAFTER CHANGES:" -ForegroundColor Cyan
+    Write-Host "`nAFTER CHANGES:"
     Get-CurrentStatus
     
     Write-Host "`n" + "=" * 50
-    Write-Host "Security hardening completed successfully!" -ForegroundColor Green
-    Write-Host "`nIMPORTANT NOTES:" -ForegroundColor Yellow
+    Write-Host "Security hardening completed successfully!"
+    Write-Host "`nIMPORTANT NOTES:"
     Write-Host "• A system restart is recommended for all changes to take full effect"
     Write-Host "• SMBv1 disabling may affect older applications or network devices"
     Write-Host "• NetBIOS disabling may affect name resolution in some environments"
@@ -158,7 +158,7 @@ try {
     # Prompt for restart
     $restart = Read-Host "`nWould you like to restart the computer now? (y/N)"
     if ($restart -eq 'y' -or $restart -eq 'Y') {
-        Write-Host "Restarting computer in 10 seconds..." -ForegroundColor Red
+        Write-Host "Restarting computer in 10 seconds..." 
         Start-Sleep -Seconds 10
         Restart-Computer -Force
     }

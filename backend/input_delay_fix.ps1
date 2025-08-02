@@ -1,5 +1,5 @@
 # Disable HPET (High Precision Event Timer)
-Write-Host "Disabling HPET..." -ForegroundColor Cyan
+Write-Host "Disabling HPET..."
 bcdedit /deletevalue useplatformclock
 
 # OPTIONAL: Enable HPET again (uncomment if needed)
@@ -11,6 +11,4 @@ Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseSpeed" -Value "0"
 Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseThreshold1" -Value "0"
 Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseThreshold2" -Value "0"
 
-Write-Host "`n✅ HPET disabled and mouse acceleration removed."
-Write-Host "🔁 Restart your PC for changes to take effect." -ForegroundColor Yellow
-
+Write-Host "🔁 Restart your PC for changes to take effect."
